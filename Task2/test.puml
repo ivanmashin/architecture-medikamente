@@ -1,0 +1,46 @@
+@startuml test
+
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+LAYOUT_WITH_LEGEND()
+
+Person(patient, "Patient")
+Person(doctor, "Doctor")
+Person(reception, "Receptionist")
+Person(cashier, "Cashier")
+Person(ba, "Data Analyst")
+
+System_Boundary(med, "MEDIKAMENTE"){
+
+  Container(api, "API Gateway", "Kong/NGINX", "TLS1.3, rate‑limit")
+  Container(iam, "IAM", "Keycloak", "SSO/OIDC, MFA")
+  Container(authz, "Policy engine", "OPA/OpenFGA", "RBAC/ABAC, tag‑based")
+  Container(emr, "EMR Service", "Spring Boot", "Medical records, tag=PHI")
+  Container(billing, "Payment Gateway", "Go + Vault", "Tokenise PAN, tag=FIN")
+  Container(tis, "1С Торг&Склад", "Legacy 1С", "Commercial secrets, tag=COM")
+  Container(db, "PostgreSQL TDE", "RDS", "Encrypted PII/HR")
+  Container(lake, "Encrypted Lakehouse", "MinIO + Iceberg", "Raw/Curated/Anon zones")
+  Container(niFi, "NiFi DLP", "ETL", "Mask/Tokenise on ingest")
+  Container(datahub, "DataHub", "Metadata Catalog", "Tags, lineage")
+  Container(audit, "Immutable Audit", "Loki + Object‑Lock", "WORM logs")
+}
+
+' ==== Relationships ====
+patient  --> api : HTTPs (PII)
+doctor   --> api
+reception--> api
+cashier  --> billing : mTLS (FIN)
+
+api --> iam
+api --> authz
+authz -> emr
+authz -> billing
+authz -> tis
+authz -> db
+
+billing --> Vault : tokenise PAN
+niFi --> lake : masked data
+lake --> datahub : lineage + tags
+audit <-- api : Access logs (SHA‑chain)
+ba --> lake : read anonymised zone
+
+@enduml
